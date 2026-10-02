@@ -1,103 +1,144 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <ArduinoOTA.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
+#include <BLEAdvertisedDevice.h>
 #include <SPI.h>
-#include <NimBLEDevice.h>
+#include <mcp_can.h>
 #include "mbedtls/aes.h"
 
-const std::string MAC_MPPT1 = "ff:8b:3a:10:f6:e6";
+// ==========================================
+// CONFIGURAÇÕES DO MCP2515 (DISPLAY)
+// ==========================================
+const int SPI_CS_PIN = 5;
+const int CAN_INT_PIN = 4;
+MCP_CAN CAN(SPI_CS_PIN);
 
-// A chave que você pegou no App
-const uint8_t KEY_MPPT1[16] = {0x9b, 0x7b, 0x3c, 0xd5, 0x58, 0x27, 0x6c, 0xca, 0x07, 0x57, 0x5e, 0x1d, 0x8f, 0x7c, 0xd0, 0xcf};
+// ==========================================
+// ESTRUTURA DOS MPPTs VICTRON
+// ==========================================
+struct VictronMPPT {
+  String mac;
+  uint8_t bindKey[16];
+  uint16_t idTensao;
+  uint16_t idCorrente;
+};
 
-// Função que descriptografa e caça a tensão de 31.98V
-void procurar_tensao(const uint8_t* key, const uint8_t* dados_brutos, int tamanho, String nome_teste) {
-    mbedtls_aes_context aes;
-    mbedtls_aes_init(&aes);
-    mbedtls_aes_setkey_enc(&aes, key, 128); 
-    
-    uint8_t nonce_counter[16] = {0};
-    nonce_counter[0] = dados_brutos[3];
-    nonce_counter[1] = dados_brutos[4];
+// Array contendo os seus dois controladores de carga
+VictronMPPT mppts[2] = {
+  { // ================= MPPT 1 =================
+    "ff:8b:3a:10:f6:e6",
+    {0x9b, 0x7b, 0x3c, 0xd5, 0x58, 0x27, 0x6c, 0xca, 0x07, 0x57, 0x5e, 0x1d, 0x8f, 0x7c, 0xd0, 0xcf},
+    200, 
+    201  
+  },
+  { // ================= MPPT 2 =================
+    "d1:94:ad:e1:ba:e9",
+    {0xaa, 0xef, 0x28, 0x6a, 0x8c, 0xc3, 0x1a, 0x21, 0xdd, 0xd4, 0x8e, 0x6f, 0xb9, 0x61, 0x82, 0x8d}, 
+    202, 
+    203  
+  }
+};
 
-    size_t nc_off = 0;
-    uint8_t stream_block[16] = {0};
-    uint8_t desc[32] = {0};
-    int tam_cripto = tamanho - 5;
+BLEScan* pBLEScan;
 
-    mbedtls_aes_crypt_ctr(&aes, tam_cripto, &nc_off, nonce_counter, stream_block, &dados_brutos[5], desc);
-    mbedtls_aes_free(&aes);
+// ==========================================
+// FUNÇÃO: ENVIAR UAVCAN (Padrão Float32)
+// ==========================================
+void enviarUavcan(uint16_t subjectId, float valor) {
+  // Cabeçalho UAVCAN v1 (Cyphal)
+  uint32_t canId = (4UL << 26) | ((uint32_t)(subjectId & 0x1FFF) << 7) | 55;
+  
+  byte payload[8] = {0}; 
+  
+  // Copia nativamente os 4 bytes do Float para o pacote (Formato IEEE 754)
+  memcpy(payload, &valor, sizeof(float)); 
 
-    Serial.printf("\n[%s] DEC: ", nome_teste.c_str());
-    for(int i = 0; i < tam_cripto; i++) {
-        Serial.printf("%02X ", desc[i]);
-    }
-    Serial.println();
-
-    bool achou = false;
-    // Varre todos os bytes descriptografados procurando ~31.98V
-    for(int i = 0; i < tam_cripto - 1; i++) {
-        // Testa leitura Little-Endian (Padrão Victron)
-        uint16_t val_little = desc[i] | (desc[i+1] << 8);
-        float volts_l = val_little / 100.0;
-        
-        // Testa leitura Big-Endian
-        uint16_t val_big = (desc[i] << 8) | desc[i+1];
-        float volts_b = val_big / 100.0;
-
-        // Se achar qualquer tensão entre 31.00V e 32.50V, nós achamos o tesouro!
-        if(volts_l >= 31.0 && volts_l <= 32.5) {
-            Serial.printf("  => BINGO!!! Tensao %.2fV encontrada no offset %d (Little-Endian)\n", volts_l, i);
-            achou = true;
-        }
-        if(volts_b >= 31.0 && volts_b <= 32.5) {
-            Serial.printf("  => BINGO!!! Tensao %.2fV encontrada no offset %d (Big-Endian)\n", volts_b, i);
-            achou = true;
-        }
-    }
-    
-    if(!achou) {
-        Serial.println("  -> Falhou. Tensao da fonte nao encontrada neste teste.");
-    }
+  // Envia via CAN (Estendido / 29 bits)
+  CAN.sendMsgBuf(canId, 1, 8, payload);
 }
 
-class BLECallbacks : public NimBLEAdvertisedDeviceCallbacks {
-    void onResult(NimBLEAdvertisedDevice* advertisedDevice) {
-        std::string mac = advertisedDevice->getAddress().toString();
-        
-        if (mac == MAC_MPPT1 && advertisedDevice->haveManufacturerData()) {
-            std::string payload = advertisedDevice->getManufacturerData();
-            const uint8_t* dados_brutos = (const uint8_t*)payload.data();
-            int tamanho = payload.length();
-
-            if (tamanho > 10 && dados_brutos[0] == 0xE1 && dados_brutos[1] == 0x02 && dados_brutos[2] == 0x01) {
-                Serial.println("\n==================================================");
-                Serial.printf("Pacote capturado do MAC: %s\n", mac.c_str());
-                
-                // 1. Testa a chave normal
-                procurar_tensao(KEY_MPPT1, dados_brutos, tamanho, "TESTE 1 - CHAVE NORMAL");
-
-                // 2. Testa a chave de trás pra frente (Reverse Endianness)
-                uint8_t rev_key[16];
-                for(int i=0; i<16; i++) rev_key[i] = KEY_MPPT1[15-i];
-                procurar_tensao(rev_key, dados_brutos, tamanho, "TESTE 2 - CHAVE INVERTIDA");
-            }
+// ==========================================
+// CALLBACK BLE (LEITURA DE MÚLTIPLOS MPPTs)
+// ==========================================
+class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
+    void onResult(BLEAdvertisedDevice advertisedDevice) {
+      // CORREÇÃO AQUI: adicionado o .c_str() para converter para String do Arduino
+      String deviceMac = advertisedDevice.getAddress().toString().c_str();
+      
+      int mpptIndex = -1;
+      for (int i = 0; i < 2; i++) {
+        if (deviceMac.equalsIgnoreCase(mppts[i].mac)) {
+          mpptIndex = i;
+          break;
         }
+      }
+
+      if (mpptIndex == -1) return; 
+
+      if (advertisedDevice.haveManufacturerData()) {
+        std::string rawData = advertisedDevice.getManufacturerData();
+        
+        if (rawData.length() >= 22 && rawData[2] == 0x10) {
+          if (rawData[9] == mppts[mpptIndex].bindKey[0]) {
+            
+            uint8_t nonce[16] = {0};
+            nonce[0] = rawData[7]; 
+            nonce[1] = rawData[8]; 
+
+            uint8_t ciphertext[12];
+            for (int i = 0; i < 12; i++) ciphertext[i] = rawData[10 + i];
+
+            uint8_t decrypted[12] = {0}; 
+
+            mbedtls_aes_context aes;
+            mbedtls_aes_init(&aes);
+            mbedtls_aes_setkey_enc(&aes, mppts[mpptIndex].bindKey, 128);
+            size_t nc_off = 0;
+            uint8_t stream_block[16] = {0};
+            mbedtls_aes_crypt_ctr(&aes, 12, &nc_off, nonce, stream_block, ciphertext, decrypted);
+            mbedtls_aes_free(&aes);
+
+            int16_t raw_v = decrypted[2] | (decrypted[3] << 8);
+            float tensao_real = raw_v / 100.0f;
+
+            int16_t raw_c = decrypted[4] | (decrypted[5] << 8);
+            float corrente_real = raw_c / 10.0f;
+
+            // IMPRESSÃO CLARA DE QUAL MPPT FOI LIDO
+            Serial.printf("[MPPT %d] Tensao: %5.2f V | Corrente: %5.2f A\n", mpptIndex + 1, tensao_real, corrente_real);
+            
+            // Envia para a CAN
+            enviarUavcan(mppts[mpptIndex].idTensao, tensao_real);
+            enviarUavcan(mppts[mpptIndex].idCorrente, corrente_real);
+          }
+        }
+      }
     }
 };
 
 void setup() {
-    Serial.begin(115200);
-    Serial.println("\n--- INICIANDO CAÇA-TESOURO DA TENSAO (31.98V) ---");
-    Serial.println("Aguardando pacotes...");
+  Serial.begin(115200);
+  Serial.println("\n--- TRADUTOR VICTRON DUAL -> UAVCAN INICIADO ---");
 
-    NimBLEDevice::init("");
-    NimBLEScan* pBLEScan = NimBLEDevice::getScan();
-    pBLEScan->setAdvertisedDeviceCallbacks(new BLECallbacks());
-    pBLEScan->setActiveScan(true); 
-    pBLEScan->setInterval(100);
-    pBLEScan->setWindow(99); 
+  if(CAN.begin(MCP_ANY, CAN_250KBPS, MCP_8MHZ) == CAN_OK) {
+    Serial.println("MCP2515 Inciado a 250kbps!");
+    CAN.setMode(MCP_NORMAL);
+  } else {
+    Serial.println("Falha no MCP2515!");
+  }
+
+  BLEDevice::init("");
+  pBLEScan = BLEDevice::getScan();
+  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+  pBLEScan->setActiveScan(true);
+  pBLEScan->setInterval(100);
+  pBLEScan->setWindow(99); 
 }
 
 void loop() {
-    NimBLEDevice::getScan()->start(5, false);
-    NimBLEDevice::getScan()->clearResults();
+  pBLEScan->start(1, false);
+  pBLEScan->clearResults(); 
+  delay(10);
 }

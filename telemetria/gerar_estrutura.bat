@@ -1,0 +1,1 @@
+tree lib /F /A > estrutura_projeto.txt

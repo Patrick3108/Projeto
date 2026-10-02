@@ -4,7 +4,8 @@ import 'can_network_service.dart';
 import 'uavcan_parser.dart';
 
 class TelemetriaController {
-  final CanNetworkService _canService;
+  // Tornamos o serviço público (sem o "_") para o Datalogger poder escutar
+  final CanNetworkService canService;
 
   // === TELA 1: MOTORES ===
   final ValueNotifier<double> rpmBb = ValueNotifier(0.0);
@@ -33,36 +34,43 @@ class TelemetriaController {
   final ValueNotifier<double> correnteMppt1 = ValueNotifier(0.0);
   final ValueNotifier<double> tensaoMppt2 = ValueNotifier(0.0);
   final ValueNotifier<double> correnteMppt2 = ValueNotifier(0.0);
+  final ValueNotifier<double> potenciaMppt1 = ValueNotifier(0.0);
+  final ValueNotifier<double> potenciaMppt2 = ValueNotifier(0.0);
 
-  TelemetriaController(this._canService) {
+  // === TELA 3: DIAGNÓSTICO MPPT ===
+  final ValueNotifier<int> estadoMppt1 = ValueNotifier(0);
+  final ValueNotifier<int> erroMppt1 = ValueNotifier(0);
+  final ValueNotifier<int> estadoMppt2 = ValueNotifier(0);
+  final ValueNotifier<int> erroMppt2 = ValueNotifier(0);
+
+  // === TELA 4: DIAGNÓSTICO MOTORES ===
+  final ValueNotifier<int> erroMotorBb = ValueNotifier(0);
+  final ValueNotifier<int> erroMotorBe = ValueNotifier(0);
+
+  TelemetriaController(this.canService) {
     _ouvirRedeCan();
   }
 
-  // NOVA LÓGICA DE INÍCIO: Faz o "Sweep" e depois liga a CAN
   void iniciar() async {
     await _animacaoDePartida();
-    _canService.conectar();
+    canService.conectar();
   }
 
-  void parar() => _canService.desconectar();
+  void parar() => canService.desconectar();
 
-  // Função que anima os ponteiros do 0 ao Máximo e volta
   Future<void> _animacaoDePartida() async {
     int passos = 25;
-    int tempoPasso = 50; // Velocidade da animação (ms)
+    int tempoPasso = 50; 
 
-    // Sobe os valores
     for (int i = 0; i <= passos; i++) {
       _aplicarValoresAnimacao(i / passos);
       await Future.delayed(Duration(milliseconds: tempoPasso));
     }
-    // Desce os valores
     for (int i = passos; i >= 0; i--) {
       _aplicarValoresAnimacao(i / passos);
       await Future.delayed(Duration(milliseconds: tempoPasso));
     }
     
-    // Zera tudo perfeitamente antes da rede CAN assumir
     _aplicarValoresAnimacao(0.0);
   }
 
@@ -73,18 +81,17 @@ class TelemetriaController {
     aceleradorBe.value = 100.0 * fator;
     correnteBb.value = 80.0 * fator;
     correnteBe.value = 80.0 * fator;
-    tempBb.value = 0.0 + (110.0 * fator); // Vai de 0 até 110
+    tempBb.value = 0.0 + (110.0 * fator); 
     tempBe.value = 0.0 + (110.0 * fator);
     tempEscBb.value = 0.0 + (110.0 * fator);
     tempEscBe.value = 0.0 + (110.0 * fator);
     
-    // Bateria (Exemplo visual)
-    tensaoBateria.value = 40.0 + (18.0 * fator); // Vai de 40V até 58V
+    tensaoBateria.value = 40.0 + (18.0 * fator); 
     correnteBateria.value = 130.0 * fator;
   }
 
   void _ouvirRedeCan() {
-    _canService.canFramesStream.listen((framebruto) {
+    canService.canFramesStream.listen((framebruto) {
       if (framebruto is! String) return;
 
       UavcanData? dados = UavcanParser.decodificarFrame(framebruto);
@@ -96,22 +103,36 @@ class TelemetriaController {
 
   void _distribuirDadosUavcan(UavcanData dados) {
     switch (dados.subjectId) {
+      // MOTORES
       case UavcanParser.idRpmBb: rpmBb.value = dados.valor; break;
       case UavcanParser.idCorrenteBb: correnteBb.value = dados.valor; break;
       case UavcanParser.idTempBb: tempBb.value = dados.valor; break;
       case UavcanParser.idTempEscBb: tempEscBb.value = dados.valor; break;
       case UavcanParser.idAceleradorBb: aceleradorBb.value = dados.valor; break;
+      case UavcanParser.idErroMotorBb: erroMotorBb.value = dados.valor.toInt(); break;
       
       case UavcanParser.idRpmBe: rpmBe.value = dados.valor; break;
       case UavcanParser.idCorrenteBe: correnteBe.value = dados.valor; break;
       case UavcanParser.idTempBe: tempBe.value = dados.valor; break;
       case UavcanParser.idTempEscBe: tempEscBe.value = dados.valor; break;
       case UavcanParser.idAceleradorBe: aceleradorBe.value = dados.valor; break;
+      case UavcanParser.idErroMotorBe: erroMotorBe.value = dados.valor.toInt(); break;
 
+      // ELÉTRICO & DIAGNÓSTICO MPPT
       case UavcanParser.idTensaoBateria: tensaoBateria.value = dados.valor; break;
       case UavcanParser.idCorrenteBateria: correnteBateria.value = dados.valor; break;
+      
       case UavcanParser.idTensaoMppt1: tensaoMppt1.value = dados.valor; break;
       case UavcanParser.idCorrenteMppt1: correnteMppt1.value = dados.valor; break;
+      case UavcanParser.idPotenciaMppt1: potenciaMppt1.value = dados.valor; break;
+      case UavcanParser.idEstadoMppt1: estadoMppt1.value = dados.valor.toInt(); break;
+      case UavcanParser.idErroMppt1: erroMppt1.value = dados.valor.toInt(); break;
+
+      case UavcanParser.idTensaoMppt2: tensaoMppt2.value = dados.valor; break;
+      case UavcanParser.idCorrenteMppt2: correnteMppt2.value = dados.valor; break;
+      case UavcanParser.idPotenciaMppt2: potenciaMppt2.value = dados.valor; break;
+      case UavcanParser.idEstadoMppt2: estadoMppt2.value = dados.valor.toInt(); break;
+      case UavcanParser.idErroMppt2: erroMppt2.value = dados.valor.toInt(); break;
     }
   }
 }

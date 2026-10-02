@@ -7,6 +7,7 @@ import 'dados_e_telemetria/telemetria_controller.dart';
 
 // --- IMPORTS DOS VISORES GERAIS ---
 import 'visores_especificos/geral/visor_autonomia.dart';
+import 'visores_especificos/geral/visor_datalogger.dart';
 
 // --- IMPORTS DOS MOTORES ---
 import 'visores_especificos/motores/visor_acelerador_bb.dart';
@@ -17,6 +18,7 @@ import 'visores_especificos/motores/visor_corrente_bb.dart';
 import 'visores_especificos/motores/visor_corrente_be.dart';
 import 'visores_especificos/motores/visor_temperaturas_bb.dart';
 import 'visores_especificos/motores/visor_temperaturas_be.dart';
+import 'visores_especificos/motores/visor_diagnostico_motores.dart';
 
 // --- IMPORTS DO SISTEMA ELÉTRICO ---
 import 'visores_especificos/eletrico/visor_string_1.dart';
@@ -27,6 +29,7 @@ import 'visores_especificos/eletrico/visor_mppt_1.dart';
 import 'visores_especificos/eletrico/visor_mppt_2.dart';
 import 'visores_especificos/eletrico/visor_tensao_bateria_vertical.dart';
 import 'visores_especificos/eletrico/visor_corrente_bateria_vertical.dart';
+import 'visores_especificos/eletrico/visor_diagnostico_mppt.dart';
 
 void main() {
   runApp(const PainelBimotorApp());
@@ -123,23 +126,14 @@ class _PainelCockpitState extends State<PainelCockpit> {
                                   const SizedBox(height: 2),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        width: 8, height: 8,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: _paginaAtual == 0 ? Colors.cyanAccent : Colors.white24,
-                                        ),
+                                    children: List.generate(5, (index) => Container(
+                                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                                      width: 8, height: 8,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: _paginaAtual == index ? Colors.cyanAccent : Colors.white24,
                                       ),
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        width: 8, height: 8,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: _paginaAtual == 1 ? Colors.cyanAccent : Colors.white24,
-                                        ),
-                                      ),
-                                    ],
+                                    )),
                                   ),
                                 ],
                               ),
@@ -161,7 +155,7 @@ class _PainelCockpitState extends State<PainelCockpit> {
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
                                   onTapDown: (_) {
-                                    int alvo = _paginaAtual > 0 ? _paginaAtual - 1 : 1;
+                                    int alvo = _paginaAtual > 0 ? _paginaAtual - 1 : 4;
                                     _mudarPagina(alvo);
                                   },
                                   child: const Center(child: Icon(Icons.chevron_left, size: 56, color: Colors.cyanAccent)),
@@ -196,7 +190,6 @@ class _PainelCockpitState extends State<PainelCockpit> {
                                             children: [
                                               Expanded(flex: 5, child: VisorCorrenteBb(controller: _controller)),
                                               const SizedBox(width: 4),
-                                              // As temperaturas saem daqui, entram as barras da bateria (Mantendo o flex 20)
                                               Expanded(flex: 20, child: VisorTensaoBateriaVertical(controller: _controller)),
                                               const SizedBox(width: 4),
                                               Expanded(flex: 20, child: VisorCorrenteBateriaVertical(controller: _controller)),
@@ -219,7 +212,6 @@ class _PainelCockpitState extends State<PainelCockpit> {
                                           const Text('SISTEMA ELÉTRICO E TÉRMICAS', style: TextStyle(fontSize: 26.0, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
                                           const SizedBox(height: 8),
                                           
-                                          // FITTEDBOX
                                           Expanded(
                                             child: FittedBox(
                                               fit: BoxFit.contain,
@@ -227,7 +219,6 @@ class _PainelCockpitState extends State<PainelCockpit> {
                                               child: Row(
                                                 crossAxisAlignment: CrossAxisAlignment.start,
                                                 children: [
-                                                  // Coluna Esquerda: Solares
                                                   SizedBox(
                                                     width: 420,
                                                     child: Column(
@@ -243,8 +234,6 @@ class _PainelCockpitState extends State<PainelCockpit> {
                                                     ),
                                                   ),
                                                   const SizedBox(width: 32),
-                                                  
-                                                  // Coluna Direita: MPPT e Temperaturas
                                                   SizedBox(
                                                     width: 420,
                                                     child: Column(
@@ -253,7 +242,6 @@ class _PainelCockpitState extends State<PainelCockpit> {
                                                         const SizedBox(height: 16),
                                                         VisorMppt2(controller: _controller),
                                                         const SizedBox(height: 16),
-                                                        // A bateria saiu daqui, entram as temperaturas duplas
                                                         VisorTemperaturasBb(controller: _controller),
                                                         const SizedBox(height: 16),
                                                         VisorTemperaturasBe(controller: _controller),
@@ -267,6 +255,30 @@ class _PainelCockpitState extends State<PainelCockpit> {
                                         ],
                                       ),
                                     ),
+                                    
+                                    // ==========================================
+                                    // ECRÃ 3: DIAGNÓSTICO MPPTs
+                                    // ==========================================
+                                    Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: VisorDiagnosticoMppt(controller: _controller),
+                                    ),
+
+                                    // ==========================================
+                                    // ECRÃ 4: DIAGNÓSTICO MOTORES
+                                    // ==========================================
+                                    Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: VisorDiagnosticoMotores(controller: _controller),
+                                    ),
+
+                                    // ==========================================
+                                    // ECRÃ 5: DATALOGGER E REDE CAN
+                                    // ==========================================
+                                    Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: VisorDatalogger(controller: _controller),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -277,7 +289,7 @@ class _PainelCockpitState extends State<PainelCockpit> {
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
                                   onTapDown: (_) {
-                                    int alvo = _paginaAtual < 1 ? _paginaAtual + 1 : 0;
+                                    int alvo = _paginaAtual < 4 ? _paginaAtual + 1 : 0;
                                     _mudarPagina(alvo);
                                   },
                                   child: const Center(child: Icon(Icons.chevron_right, size: 56, color: Colors.cyanAccent)),

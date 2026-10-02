@@ -1,0 +1,48 @@
+Folder PATH listing for volume OS
+Volume serial number is 0C62-0B5A
+C:\PROJETO\TELEMETRIA\LIB
+|   criar_estrutura.bat
+|   enviartela.sh
+|   estrutura_projeto.txt
+|   EZkontrol-CANBUS-MCU.pdf
+|   gerar_estrutura.bat
+|   main.dart
+|   manual config fios e portas.py
+|   
++---dados_e_telemetria
+|       can_network_service.dart
+|       golden_motor_parser.dart
+|       telemetria_controller.dart
+|       uavcan_parser.dart
+|       
++---templates_visuais
+|       mostrador-barra-vertical.dart
+|       mostrador-digital.dart
+|       mostrador-linha.dart
+|       mostrador-rpm.dart
+|       mostrador-temperatura.dart
+|       
+\---visores_especificos
+    +---eletrico
+    |       visor_corrente_bateria_vertical.dart
+    |       visor_corrente_total_strings.dart
+    |       visor_mppt_1.dart
+    |       visor_mppt_2.dart
+    |       visor_string_1.dart
+    |       visor_string_2.dart
+    |       visor_string_3.dart
+    |       visor_tensao_bateria_vertical.dart
+    |       
+    +---geral
+    |       visor_autonomia.dart
+    |       
+    \---motores
+            visor_acelerador_bb.dart
+            visor_acelerador_be.dart
+            visor_corrente_bb.dart
+            visor_corrente_be.dart
+            visor_rpm_bb.dart
+            visor_rpm_be.dart
+            visor_temperaturas_bb.dart
+            visor_temperaturas_be.dart
+            

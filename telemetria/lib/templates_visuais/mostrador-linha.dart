@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 class MostradorLinha extends StatelessWidget {
   final String titulo;
   final String valorPrimario;
-  final String? valorSecundario; // Opcional (usado para Corrente, caso haja Tensão)
+  final String? valorSecundario; 
+  final String? valorTerciario; // <-- NOVO: Opcional para os Watts
   final Color corDestaque;
 
   const MostradorLinha({
@@ -11,6 +12,7 @@ class MostradorLinha extends StatelessWidget {
     required this.titulo,
     required this.valorPrimario,
     this.valorSecundario,
+    this.valorTerciario,
     required this.corDestaque,
   });
 
@@ -36,6 +38,12 @@ class MostradorLinha extends StatelessWidget {
                 const Text("|", style: TextStyle(fontSize: 28.0, color: Colors.white24)),
                 const SizedBox(width: 16),
                 Text(valorSecundario!, style: TextStyle(fontSize: 26.0, fontWeight: FontWeight.bold, color: corDestaque)),
+              ],
+              if (valorTerciario != null) ...[ // <-- NOVA BARRA DIVISÓRIA PARA OS WATTS
+                const SizedBox(width: 16),
+                const Text("|", style: TextStyle(fontSize: 28.0, color: Colors.white24)),
+                const SizedBox(width: 16),
+                Text(valorTerciario!, style: TextStyle(fontSize: 26.0, fontWeight: FontWeight.bold, color: Colors.amberAccent)), // Destaque em amarelo para diferenciar a Potência
               ]
             ],
           ),
