@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async';
+import 'dart:typed_data'; 
+// Importação absoluta apontando para a raiz lib/
+import 'package:telemetria/gps_state.dart'; 
+
 import 'can_network_service.dart';
 import 'uavcan_parser.dart';
 
 class TelemetriaController {
-  // Tornamos o serviço público (sem o "_") para o Datalogger poder escutar
   final CanNetworkService canService;
 
   // === TELA 1: MOTORES ===
@@ -98,12 +101,51 @@ class TelemetriaController {
       if (dados != null) {
         _distribuirDadosUavcan(dados);
       }
+
+      _processarGpsDireto(framebruto);
     });
+  }
+
+  void _processarGpsDireto(String framebruto) {
+    try {
+      final regex = RegExp(r'(?:[a-zA-Z0-9]+)?\s*([0-9A-Fa-f]{7,8})[\s#]+(?:\[\d+\]\s*)?([0-9A-Fa-f\s]+)');
+      final match = regex.firstMatch(framebruto);
+      
+      if (match != null) {
+        int canId = int.parse(match.group(1)!, radix: 16);
+        String hexData = match.group(2)!.replaceAll(RegExp(r'\s+'), '');
+        
+        List<int> payload = [];
+        for (int i = 0; i < hexData.length; i += 2) {
+          payload.add(int.parse(hexData.substring(i, i + 2), radix: 16));
+        }
+
+        int subjectId = (canId >> 8) & 0x1FFF;
+
+        if (subjectId == 4001 || subjectId == 4002 || subjectId == 4003) {
+          if (payload.length >= 4) {
+            Uint8List bytes = Uint8List.fromList(payload.sublist(0, 4));
+            ByteData byteData = ByteData.sublistView(bytes);
+            double valorFloat = byteData.getFloat32(0, Endian.little);
+
+            if (subjectId == 4001) {
+              gpsState.latitude.value = valorFloat;
+            } else if (subjectId == 4002) {
+              gpsState.longitude.value = valorFloat;
+            } else if (subjectId == 4003 && payload.length >= 5) {
+              gpsState.speed.value = valorFloat;
+              gpsState.satellites.value = payload[4]; 
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Ignora falhas silenciosamente
+    }
   }
 
   void _distribuirDadosUavcan(UavcanData dados) {
     switch (dados.subjectId) {
-      // MOTORES
       case UavcanParser.idRpmBb: rpmBb.value = dados.valor; break;
       case UavcanParser.idCorrenteBb: correnteBb.value = dados.valor; break;
       case UavcanParser.idTempBb: tempBb.value = dados.valor; break;
@@ -118,7 +160,6 @@ class TelemetriaController {
       case UavcanParser.idAceleradorBe: aceleradorBe.value = dados.valor; break;
       case UavcanParser.idErroMotorBe: erroMotorBe.value = dados.valor.toInt(); break;
 
-      // ELÉTRICO & DIAGNÓSTICO MPPT
       case UavcanParser.idTensaoBateria: tensaoBateria.value = dados.valor; break;
       case UavcanParser.idCorrenteBateria: correnteBateria.value = dados.valor; break;
       

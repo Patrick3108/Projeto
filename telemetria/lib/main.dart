@@ -8,6 +8,8 @@ import 'dados_e_telemetria/telemetria_controller.dart';
 // --- IMPORTS DOS VISORES GERAIS ---
 import 'visores_especificos/geral/visor_autonomia.dart';
 import 'visores_especificos/geral/visor_datalogger.dart';
+// IMPORT ATUALIZADO PARA A TELA 6 DE GPS COM O CAMINHO CORRETO:
+import 'visores_especificos/geral/tela_6_gps.dart';
 
 // --- IMPORTS DOS MOTORES ---
 import 'visores_especificos/motores/visor_acelerador_bb.dart';
@@ -126,7 +128,7 @@ class _PainelCockpitState extends State<PainelCockpit> {
                                   const SizedBox(height: 2),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    children: List.generate(5, (index) => Container(
+                                    children: List.generate(6, (index) => Container(
                                       margin: const EdgeInsets.symmetric(horizontal: 4),
                                       width: 8, height: 8,
                                       decoration: BoxDecoration(
@@ -155,7 +157,7 @@ class _PainelCockpitState extends State<PainelCockpit> {
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
                                   onTapDown: (_) {
-                                    int alvo = _paginaAtual > 0 ? _paginaAtual - 1 : 4;
+                                    int alvo = _paginaAtual > 0 ? _paginaAtual - 1 : 5;
                                     _mudarPagina(alvo);
                                   },
                                   child: const Center(child: Icon(Icons.chevron_left, size: 56, color: Colors.cyanAccent)),
@@ -279,6 +281,14 @@ class _PainelCockpitState extends State<PainelCockpit> {
                                       padding: const EdgeInsets.all(16.0),
                                       child: VisorDatalogger(controller: _controller),
                                     ),
+
+                                    // ==========================================
+                                    // ECRÃ 6: NAVEGAÇÃO GPS
+                                    // ==========================================
+                                    const Padding(
+                                      padding: EdgeInsets.all(8.0),
+                                      child: Tela6GPS(),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -289,7 +299,7 @@ class _PainelCockpitState extends State<PainelCockpit> {
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
                                   onTapDown: (_) {
-                                    int alvo = _paginaAtual < 4 ? _paginaAtual + 1 : 0;
+                                    int alvo = _paginaAtual < 5 ? _paginaAtual + 1 : 0;
                                     _mudarPagina(alvo);
                                   },
                                   child: const Center(child: Icon(Icons.chevron_right, size: 56, color: Colors.cyanAccent)),

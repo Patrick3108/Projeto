@@ -56,7 +56,7 @@ class UavcanParser {// =========================================================
       if (idHex.length != 8) return null; // Exige ID Estendido do UAVCAN
 
       int canId = int.parse(idHex, radix: 16);
-      int subjectId = (canId >> 7) & 0x1FFF;
+      int subjectId = (canId >> 8) & 0x1FFF;
 
       List<String> payloadHex = partes.sublist(3);
       
